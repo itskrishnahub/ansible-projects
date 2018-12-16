@@ -1,0 +1,12 @@
+--- #Playbook to run puppet agent on the nodes
+- hosts: test
+  user: {{ user }}
+  become: yes
+  connection: ssh
+  gather_facts: no
+  tasks:
+    - name: using command module
+      command: puppet agent -t
+      failed_when: " 'Error' in result.stderr"
+      register: result
+    - debug: var=result

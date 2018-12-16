@@ -1,0 +1,59 @@
+--- #Audit playbook to determine if server is managed by puppet and also provide the listing for passwd, group, sudoers, shadow and /etc/sudoers.d/* files for auditing purposes
+- hosts: test
+  user: {{ user }}
+  become: yes
+  connection: ssh
+  gather_facts: yes
+  vars:
+    key1: "Puppet managed"
+    key2: "NOT puppet managed"
+    key3: "{{ result.rc }}"
+    key4: "{% if key3=='0' %}{{ key1 }}{% else %}{{ key2 }}{% endif %}"
+  vars_files:
+    - listing.yml
+  tasks:
+    - name: Register status of a service
+      shell: service sssd status
+      register: result
+      ignore_errors: true
+    - debug: var=result
+    - name: local action to provide the listing for puppet managed servers
+      local_action: shell echo  "{{ ansible_hostname }} is {{ key4 }}" >> auditfiles_1210/puppet.txt
+    - name: fetch /etc/passwd,group,sudoers,shadow files from the servers
+      fetch: src={{ item }} dest=auditfiles_1210/{{ item }}-{{ ansible_hostname }}.txt flat=yes
+      with_items:
+        - "{{ path }}"
+    - name: create directory file structure for sudoers.d files on local server
+      file: path=auditfiles_1210/sudoers.d/{{ ansible_hostname }}/ state=directory owner={{ user }} group={{ group }} mode=775
+      delegate_to: 127.0.0.1
+    - name: gather /etc/sudoers.d/ files from the servers
+      synchronize: mode=pull src=/etc/sudoers.d/ dest=auditfiles_1210/sudoers.d/{{ ansible_hostname }}/
+      delegate_to: 127.0.0.1
+    - name: provide write permissions for sudoers.d file
+      file: dest=auditfiles_1210/sudoers.d/{{ ansible_hostname }}/ mode=0775 recurse=yes
+      delegate_to: 127.0.0.1
+    - name: convert the file format to Windows
+      shell: find /home/{{ uid }}/ansible/audit/auditfiles_1210 -type f -exec unix2dos {} \;
+      delegate_to: 127.0.0.1
+    - name: gzip all the files
+      archive:
+        path:
+        - /home/{{ uid }}/ansible/audit/auditfiles_1210
+        dest: /home/{{ uid }}/ansible/audit/auditfiles_1210/folder.zip
+        format: zip
+        owner: {{ user }}
+        group: {{ group }}
+      delegate_to: 127.0.0.1
+      run_once: true
+    - name: send emails to krishna
+      mail:
+        from: Krishna@mycompany
+        to:
+        - Krishna@mycompany
+        cc:
+        - Krishna@mycompany
+        subject: Audit
+        body: The email has been generated through Ansible. Please find the requested zip file in the attachments.Please delegate any futher questions on this request to Krishna.
+        attach: /home/{{ uid }}/ansible/audit/auditfiles_1210/folder.zip
+      delegate_to: 127.0.0.1
+      run_once: true

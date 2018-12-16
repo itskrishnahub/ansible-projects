@@ -1,0 +1,13 @@
+--- #Playbook to validate if a specific user is added to a group. 'group' and 'env' variables need to be mentioned in extra_vars.
+- hosts: 127.0.0.1
+  user: {{ user }}
+  become: yes
+  connection: local
+  gather_facts: no
+  vars_files:
+    - uidlist.yml
+  tasks:
+    - name:
+      shell: id {{ item }} | grep -o {{ group }} &&  if [ 'echo $?' ] ; then echo "{{ item }}" >> adgroup/{{ env }}_list.txt; fi
+      with_items: "{{ modules }}"
+      ignore_errors: yes

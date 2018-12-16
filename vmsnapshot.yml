@@ -1,0 +1,90 @@
+--- #Playbook to create a VM snapshot. I have replaced confidential info with 'na'.
+- hosts: 127.0.0.1
+  user: {{ user }}
+  become: yes
+  connection: local
+  gather_facts: no
+  vars:
+    debug: 1
+    snapshot_name: snapshot_{{ guest_name }}_{{ date }}
+    key1: "{{  guest_name[0:3] }}"
+    key2: "{{  guest_name[-1] }}"
+    key3: "{{  guest_name[3] }}"
+    date: "{{ lookup('pipe','date +%Y-%m-%d-%H-%M') }}"
+    envKey: "{% if key1=='na' %}{{ key3 }}{% else %}{{ key2 }}{% endif %}"
+    vCenterhostname: "{% if envKey=='p' %}na{% else %}na{% endif %}"
+    datacenter: "{% if envKey=='p' %}na{% else %}na{% endif %}"
+    folder: "{% if envKey=='p' %}na{% else %}na{% endif %}"
+  vars_prompt:
+    - name: guest_name
+      prompt: Please enter your vcenter guest name
+      private: no
+    - name: vcenter_username
+      prompt: Please enter your vcenter username
+      private: no
+    - name: vcenter_password
+      prompt: Please enter your vcenter password
+      private: yes
+    - name: snap_description
+      prompt: Please provide a description for the snapshot
+      private: no
+  tasks:
+
+    - name: Gather facts about a list of VM snapshots
+      vmware_guest_snapshot_facts:
+        hostname: "{{ vCenterhostname }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        datacenter: "{{ datacenter }}"
+        name: "{{ guest_name | trim }}"
+        folder: "{{ folder  }}"
+        validate_certs: False
+      register: snapshot_facts
+      #no_log: true
+    
+    - name: List of existing snapshots for {{ guest_name }}
+      debug:
+        var: snapshot_facts.guest_snapshots.snapshots
+    - pause:
+        prompt: "Do you still want to create snapshot (yes/no)?"
+      register: result
+
+    - debug:
+        msg:
+        - "guest_name = {{ guest_name }}"
+        - "vcenter_username = {{ vcenter_username }}"
+        - "snapshot_name = {{ snapshot_name }}"
+        - "snap_description = {{ snap_description }}"
+
+
+    - name: Create a VM snapshot
+      vmware_guest_snapshot:
+        hostname: "{{ vCenterhostname }}"
+        datacenter: "{{ datacenter }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        name: "{{ guest_name }}"
+        folder: "{{ folder  }}"
+        state: present
+        snapshot_name: "{{ snapshot_name }}"
+        description: "{{ snap_description }}"
+        validate_certs: False
+      when: result.user_input == "yes"
+
+
+    - name: Gather facts about modified list of  VM snapshots
+      vmware_guest_snapshot_facts:
+        hostname: "{{ vCenterhostname }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        datacenter: "{{ datacenter }}"
+        name: "{{ guest_name | trim }}"
+        folder: "{{ folder  }}"
+        validate_certs: False
+      register: snapshot_facts_new
+      when: result.user_input == "yes"
+
+    - name: New list of existing snapshots for {{ guest_name }}
+      debug:
+        var: snapshot_facts_new.guest_snapshots.snapshots
+      when: result.user_input == "yes"
